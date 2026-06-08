@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import './App.css';
 
 // Pages
@@ -28,6 +29,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 function App() {
   return (
     <Router>
+      <Analytics />
       <Routes>
         {/* Public Routes */}
         <Route path="/" element={<HomePage />} />

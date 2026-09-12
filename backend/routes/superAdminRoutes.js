@@ -1,91 +1,94 @@
 const express = require('express');
-const router = express.Router();
-const User = require('../models/User');
-const Announcement = require('../models/Announcement');
-const { authMiddleware, roleCheck } = require('../middleware/auth');
+const bcrypt = require('bcryptjs');
 
-// Create sub-admin (Academic, Discipline, Accounts Admin)
-router.post('/create-admin', authMiddleware, roleCheck(['super_admin']), async (req, res) => {
+const User = require('../models/User');
+const TeacherProfile = require('../models/TeacherProfile');
+const Student = require('../models/Student');
+const Class = require('../models/Class');
+const AdmissionApplication = require('../models/AdmissionApplication');
+const Discipline = require('../models/Discipline');
+const Permission = require('../models/Permission');
+const Income = require('../models/Income');
+const Expense = require('../models/Expense');
+const authMiddleware = require('../middleware/auth');
+const requireRole = require('../middleware/roleCheck');
+const { sendWelcomeEmail } = require('../utils/emailService');
+
+const router = express.Router();
+
+router.get('/super-admin/admins', authMiddleware, requireRole('super_admin'), async (req, res) => {
+  const admins = await User.find({ role: { $in: ['academic_admin', 'discipline_admin', 'accounts_admin'] } }).select('-password');
+  res.json(admins);
+});
+
+router.post('/super-admin/create-admin', authMiddleware, requireRole('super_admin'), async (req, res) => {
   try {
     const { fullName, email, password, phone, role } = req.body;
-    
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({ message: 'Email already exists' });
-    }
-    
-    const user = new User({
-      fullName, email, password, role, phone,
-      createdBy: req.userId,
-      isActive: true
+    if (await User.findOne({ email })) return res.status(400).json({ message: 'Email already exists' });
+    const hashedPassword = await bcrypt.hash(password || 'admin123', 10);
+    const newAdmin = await User.create({ fullName, email, password: hashedPassword, role, phone: phone || '', createdBy: req.userId });
+    sendWelcomeEmail({ fullName, email, role, tempPassword: password || 'admin123' }).catch(console.error);
+    res.json({ success: true, user: { _id: newAdmin._id, fullName, email, role } });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put('/super-admin/admins/:id', authMiddleware, requireRole('super_admin'), async (req, res) => {
+  try {
+    const { fullName, phone, isActive } = req.body;
+    const user = await User.findByIdAndUpdate(req.params.id, { fullName, phone, isActive }, { new: true }).select('-password');
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.delete('/super-admin/admins/:id', authMiddleware, requireRole('super_admin'), async (req, res) => {
+  await User.findByIdAndDelete(req.params.id);
+  res.json({ success: true });
+});
+
+router.get('/super-admin/stats', authMiddleware, requireRole('super_admin'), async (req, res) => {
+  try {
+    const [totalStudents, totalTeachers, totalClasses, pendingApplications, pendingDiscipline, pendingPermissions, totalIncome, totalExpenses] = await Promise.all([
+      Student.countDocuments({ isActive: true }),
+      TeacherProfile.countDocuments(),
+      Class.countDocuments(),
+      AdmissionApplication.countDocuments({ status: 'pending' }),
+      Discipline.countDocuments({ status: 'pending' }),
+      Permission.countDocuments({ status: 'pending' }),
+      Income.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
+      Expense.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }])
+    ]);
+    res.json({
+      success: true,
+      totalStudents, totalTeachers, totalClasses, pendingApplications,
+      pendingDiscipline, pendingPermissions,
+      totalIncome: totalIncome[0]?.total || 0,
+      totalExpenses: totalExpenses[0]?.total || 0
     });
-    
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.get('/super-admin/users', authMiddleware, requireRole('super_admin'), async (req, res) => {
+  try {
+    const users = await User.find().select('-password').sort({ createdAt: -1 });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+router.put('/super-admin/users/:id/toggle-active', authMiddleware, requireRole('super_admin'), async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    user.isActive = !user.isActive;
     await user.save();
-    
-    res.json({ 
-      success: true, 
-      message: `${role} created successfully`, 
-      user: { _id: user._id, fullName, email, role } 
-    });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get all sub-admins
-router.get('/admins', authMiddleware, roleCheck(['super_admin']), async (req, res) => {
-  try {
-    const admins = await User.find({ 
-      role: { $in: ['academic_admin', 'discipline_admin', 'accounts_admin'] } 
-    }).select('-password');
-    res.json(admins);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Delete admin
-router.delete('/admins/:id', authMiddleware, roleCheck(['super_admin']), async (req, res) => {
-  try {
-    await User.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: 'Admin deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Create announcement
-router.post('/announcements', authMiddleware, roleCheck(['super_admin']), async (req, res) => {
-  try {
-    const { title, content, audience, priority } = req.body;
-    const announcement = new Announcement({
-      title, content, audience, priority,
-      createdBy: req.userId
-    });
-    await announcement.save();
-    res.json({ success: true, message: 'Announcement published', announcement });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Get all announcements
-router.get('/announcements', authMiddleware, async (req, res) => {
-  try {
-    const announcements = await Announcement.find({ isActive: true })
-      .sort({ createdAt: -1 })
-      .limit(50);
-    res.json(announcements);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Delete announcement
-router.delete('/announcements/:id', authMiddleware, roleCheck(['super_admin']), async (req, res) => {
-  try {
-    await Announcement.findByIdAndDelete(req.params.id);
-    res.json({ success: true, message: 'Announcement deleted' });
+    res.json({ success: true, isActive: user.isActive });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

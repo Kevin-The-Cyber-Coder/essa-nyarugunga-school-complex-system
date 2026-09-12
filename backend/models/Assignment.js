@@ -1,18 +1,20 @@
 const mongoose = require('mongoose');
 
 const assignmentSchema = new mongoose.Schema({
-  title: { type: String, required: true },
+  title: String,
   description: String,
-  subject: { type: String, required: true },
-  classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: true },
-  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  subject: String,
+  classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
+  teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   dueDate: Date,
-  totalPoints: { type: Number, default: 100 },
+  totalPoints: Number,
+  fileUrl: String,
   submissions: [{
     studentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Student' },
     submittedAt: Date,
     content: String,
     score: Number,
+    feedback: String,
     status: { type: String, default: 'pending' }
   }],
   createdAt: { type: Date, default: Date.now }

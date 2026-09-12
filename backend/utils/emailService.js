@@ -1,107 +1,57 @@
-const nodemailer = require('nodemailer');
+const emailTransporter = require('../config/email');
+const Subscription = require('../models/Subscription');
 
-// Email transporter configuration
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-// Send contact form email to admin
-const sendContactEmail = async ({ fullName, email, phone, subject, message }) => {
-  const mailOptions = {
+const sendWelcomeEmail = async (user) => {
+  if (!process.env.EMAIL_USER) return;
+  await emailTransporter.sendMail({
     from: process.env.EMAIL_USER,
-    to: 'kevineniyomurinzi@gmail.com',
-    subject: `New Contact Form Message from ${fullName}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5;">
-        <div style="background: #1e3c72; padding: 20px; text-align: center; color: white;">
-          <h2>ESSA Nyarugunga School</h2>
-          <p>New Contact Form Submission</p>
+    to: user.email,
+    subject: `Welcome to ESSA Nyarugunga Portal, ${user.fullName}!`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:linear-gradient(135deg,#1a3a5c,#2c5f8a);color:white;padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+        <h2>🎓 Welcome to ESSA Nyarugunga Portal</h2></div>
+      <div style="background:#f5f5f5;padding:30px;border-radius:0 0 10px 10px;">
+        <h3>Dear ${user.fullName},</h3>
+        <p>Your account has been created successfully.</p>
+        <div style="background:white;padding:15px;border-radius:8px;border-left:4px solid #ffc107;">
+          <p><strong>Email:</strong> ${user.email}</p>
+          <p><strong>Password:</strong> ${user.tempPassword || 'Set by administrator'}</p>
+          <p><strong>Role:</strong> ${user.role?.toUpperCase()}</p>
         </div>
-        <div style="background: white; padding: 20px;">
-          <h3>Contact Details:</h3>
-          <p><strong>Name:</strong> ${fullName}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Phone:</strong> ${phone || 'Not provided'}</p>
-          <p><strong>Subject:</strong> ${subject || 'General Inquiry'}</p>
-          <h3>Message:</h3>
-          <p style="background: #f9f9f9; padding: 15px; border-left: 4px solid #1e3c72;">${message}</p>
-          <hr>
-          <p style="font-size: 12px; color: #666;">This message was sent from the ESSA Nyarugunga School website contact form.</p>
-        </div>
-      </div>
-    `
-  };
-  
-  await transporter.sendMail(mailOptions);
+        <p>Best regards,<br><strong>ESSA Nyarugunga Administration</strong></p>
+      </div></div>`
+  });
 };
 
-// Send admission application email to admin
-const sendAdmissionEmail = async (application) => {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: 'kevineniyomurinzi@gmail.com',
-    subject: `New Admission Application from ${application.fullName}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5;">
-        <div style="background: #1e3c72; padding: 20px; text-align: center; color: white;">
-          <h2>ESSA Nyarugunga School</h2>
-          <p>New Admission Application Received</p>
-        </div>
-        <div style="background: white; padding: 20px;">
-          <h3>Student Information:</h3>
-          <p><strong>Name:</strong> ${application.fullName}</p>
-          <p><strong>Email:</strong> ${application.email}</p>
-          <p><strong>Phone:</strong> ${application.phone}</p>
-          <p><strong>Level Applying For:</strong> ${application.level}</p>
-          <p><strong>Previous School:</strong> ${application.previousSchool}</p>
-          <p><strong>Last Average:</strong> ${application.lastAverage}%</p>
-          <h3>Parent Information:</h3>
-          <p><strong>Parent Name:</strong> ${application.parentName}</p>
-          <p><strong>Parent Phone:</strong> ${application.parentPhone}</p>
-          <hr>
-          <p style="font-size: 12px; color: #666;">Login to the admin dashboard to view full details and update application status.</p>
-        </div>
-      </div>
-    `
-  };
-  
-  await transporter.sendMail(mailOptions);
-};
-
-// Send newsletter email to subscribers
-const sendNewsletterEmail = async (email, type, data = {}) => {
-  if (type === 'welcome') {
-    const mailOptions = {
+const sendNewsNotificationEmail = async (news) => {
+  if (!process.env.EMAIL_USER) return;
+  const subscribers = await Subscription.find({ isActive: true });
+  for (const sub of subscribers) {
+    await emailTransporter.sendMail({
       from: process.env.EMAIL_USER,
-      to: email,
-      subject: 'Welcome to ESSA Nyarugunga Newsletter!',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f5f5;">
-          <div style="background: #1e3c72; padding: 20px; text-align: center; color: white;">
-            <h2>ESSA Nyarugunga School</h2>
-          </div>
-          <div style="background: white; padding: 20px;">
-            <h3>Welcome to Our Newsletter!</h3>
-            <p>Thank you for subscribing to the ESSA Nyarugunga School newsletter. You will now receive updates about:</p>
-            <ul>
-              <li>Upcoming events and activities</li>
-              <li>Academic achievements and announcements</li>
-              <li>Important deadlines and schedules</li>
-              <li>School news and updates</li>
-            </ul>
-            <p>We're excited to keep you informed about our school community!</p>
-            <hr>
-            <p style="font-size: 12px; color: #666;">You can unsubscribe at any time by clicking <a href="#">here</a>.</p>
-          </div>
-        </div>
-      `
-    };
-    await transporter.sendMail(mailOptions);
+      to: sub.email,
+      subject: `📰 New: ${news.title} - ESSA Nyarugunga`,
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:linear-gradient(135deg,#1a3a5c,#2c5f8a);color:white;padding:20px;text-align:center;"><h2>📢 New Update</h2></div>
+        <div style="padding:20px;"><h3>${news.title}</h3><p>${news.summary}</p></div></div>`
+    }).catch(console.error);
   }
 };
 
-module.exports = { sendContactEmail, sendAdmissionEmail, sendNewsletterEmail };
+const sendAdmissionConfirmationEmail = async (application) => {
+  if (!process.env.EMAIL_USER) return;
+  await emailTransporter.sendMail({
+    from: process.env.EMAIL_USER,
+    to: application.email,
+    subject: `🎓 Admission Application Received - ESSA Nyarugunga`,
+    html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:linear-gradient(135deg,#1a3a5c,#2c5f8a);color:white;padding:20px;text-align:center;"><h2>Application Received!</h2></div>
+      <div style="padding:20px;background:#f5f5f5;">
+        <h3>Dear ${application.fullName},</h3>
+        <p>Application Number: <strong>${application.applicationNumber}</strong></p>
+        <p>Status: Pending Review. We'll contact you within 3–5 business days.</p>
+      </div></div>`
+  });
+};
+
+module.exports = { sendWelcomeEmail, sendNewsNotificationEmail, sendAdmissionConfirmationEmail };

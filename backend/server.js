@@ -114,7 +114,7 @@ const studentSchema = new mongoose.Schema({
 
 const classSchema = new mongoose.Schema({
   className: String,
-  grade: { type: String, enum: ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'] },
+  grade: { type: String, enum: ['S1', 'S2', 'S3', 'S4 or L3', 'S5 or l4', 'S6 or l5'] },
   academicYear: String,
   teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
